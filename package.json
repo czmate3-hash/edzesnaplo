@@ -1,0 +1,9 @@
+{
+  "name": "edzesnaplo-pwa",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Mobil-first Edzésnapló PWA Supabase backenddel",
+  "scripts": {
+    "serve": "python -m http.server 8080 --directory public"
+  }
+}
