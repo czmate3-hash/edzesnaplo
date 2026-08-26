@@ -1,12 +1,36 @@
-const CACHE = 'edzesnaplo-v1';
-const CORE = ['./', './index.html', './styles.css', './app.js', './manifest.webmanifest'];
-self.addEventListener('install', e => e.waitUntil(caches.open(CACHE).then(c => c.addAll(CORE))));
-self.addEventListener('activate', e => e.waitUntil(self.clients.claim()));
-self.addEventListener('fetch', e => {
-  if (e.request.method !== 'GET') return;
-  e.respondWith(caches.match(e.request).then(cached => cached || fetch(e.request).then(resp => {
-    const copy = resp.clone();
-    caches.open(CACHE).then(c => c.put(e.request, copy));
-    return resp;
-  }).catch(() => cached)));
+const CACHE = 'edzesnaplo-v2';
+const CORE = ['./', './index.html', './styles.css', './app.js', './manifest.webmanifest', './icons/icon-192.svg', './icons/icon-512.svg'];
+
+self.addEventListener('install', event => {
+  event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(CORE)).then(() => self.skipWaiting()));
+});
+
+self.addEventListener('activate', event => {
+  event.waitUntil(
+    caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
+      .then(() => self.clients.claim())
+  );
+});
+
+self.addEventListener('fetch', event => {
+  const request = event.request;
+  if (request.method !== 'GET') return;
+
+  const url = new URL(request.url);
+  // Never cache authenticated/API traffic or Supabase responses.
+  if (url.hostname.endsWith('.supabase.co') || request.headers.has('Authorization')) return;
+
+  // App shell: network first so deployments become visible immediately; cache is offline fallback.
+  if (request.mode === 'navigate' || /\/(app|styles)\.js$|\/(styles)\.css$|manifest\.webmanifest$|\/icons\//.test(url.pathname)) {
+    event.respondWith(
+      fetch(request).then(response => {
+        const copy = response.clone();
+        caches.open(CACHE).then(cache => cache.put(request, copy));
+        return response;
+      }).catch(() => caches.match(request).then(cached => cached || caches.match('./index.html')))
+    );
+    return;
+  }
+
+  event.respondWith(caches.match(request).then(cached => cached || fetch(request)));
 });
