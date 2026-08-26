@@ -1,10 +1,17 @@
 {
   "name": "Edzésnapló",
   "short_name": "Edzésnapló",
+  "description": "Gyors, személyes edzésnapló célokkal, statisztikákkal, barátokkal és kihívásokkal.",
   "start_url": "./",
+  "scope": "./",
   "display": "standalone",
+  "orientation": "portrait-primary",
   "background_color": "#f8fafc",
   "theme_color": "#0f172a",
   "lang": "hu",
-  "icons": []
+  "categories": ["health", "fitness"],
+  "icons": [
+    {"src":"./icons/icon-192.svg","sizes":"192x192","type":"image/svg+xml","purpose":"any maskable"},
+    {"src":"./icons/icon-512.svg","sizes":"512x512","type":"image/svg+xml","purpose":"any maskable"}
+  ]
 }
