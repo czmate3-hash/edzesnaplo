@@ -1,32 +1,25 @@
-/* Edzésnapló QA fixes
- * Loaded after app.js. Keeps the existing UI/API while correcting presentation
- * and date-range behaviour without duplicating the whole application.
- */
+/* Final QA layer: date ranges, calendar navigation, dynamic goal ring and small UI corrections. */
 (() => {
   if (window.__edzesnaploQaLoaded) return;
   window.__edzesnaploQaLoaded = true;
-
   const originalApi = window.api;
-  const originalLoadStats = window.loadStats;
-  const originalLoadCalendar = window.loadCalendar;
   const originalLoadHome = window.loadHome;
-  const originalLoadChallenges = window.loadChallenges;
-
+  const originalLoadStats = window.loadStats;
   const pad = n => String(n).padStart(2, '0');
   const key = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
-  const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate()+n); return x; };
+  const addDays = (d,n) => { const x=new Date(d); x.setDate(x.getDate()+n); return x; };
+  if (!state.calendarCursor) state.calendarCursor = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
 
   if (typeof originalApi === 'function') {
     window.api = async (action, payload = {}, requiresAuth = true) => {
       const p = {...payload};
-      if (action === 'stats' && state.chartRange && state.chartRange !== 'all') {
+      if (action === 'stats' && state.chartRange !== 'all') {
         const end = new Date();
         const days = state.chartRange === '7' ? 6 : 29;
-        p.to = key(end);
         p.from = key(addDays(end, -days));
+        p.to = key(end);
       }
       if (action === 'calendar') {
-        if (!state.calendarCursor) state.calendarCursor = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
         p.year = state.calendarCursor.getFullYear();
         p.month = state.calendarCursor.getMonth();
       }
@@ -38,52 +31,35 @@
     const result = await originalLoadHome();
     const ring = document.querySelector('.goal-ring');
     if (ring) {
-      const total = Number(document.querySelector('.goal-ring strong')?.textContent?.replace(/[^0-9.,-]/g,'').replace(',','.') || 0);
-      const goal = Number(document.querySelector('.goal-ring span')?.textContent?.match(/[0-9.,]+/)?.[0]?.replace(',','.') || 0);
+      const total = Number((document.querySelector('.goal-ring strong')?.textContent || '').replace(/[^0-9.,-]/g,'').replace(',','.')) || 0;
+      const goal = Number((document.querySelector('.goal-ring span')?.textContent || '').match(/[0-9.,]+/)?.[0]?.replace(',','.')) || 0;
       const pct = goal > 0 ? Math.min(100, Math.max(0, total / goal * 100)) : 0;
-      ring.style.setProperty('--goal-pct', `${pct}%`);
+      ring.style.background = `radial-gradient(circle at center,var(--card) 57%,transparent 58%),conic-gradient(var(--accent) 0 ${pct}%,var(--border) ${pct}% 100%)`;
     }
     return result;
   };
 
-  window.loadStats = async function() {
-    return originalLoadStats();
-  };
+  window.loadStats = async function() { return originalLoadStats(); };
 
   window.loadCalendar = async function() {
-    const result = await originalLoadCalendar();
-    const host = document.querySelector('#calendarView');
-    if (!host || host.querySelector('.qa-calendar-nav')) return result;
-    const nav = document.createElement('div');
-    nav.className = 'qa-calendar-nav row between';
-    nav.innerHTML = `<button class="secondary small" data-cal-prev>‹ Előző</button><strong class="qa-cal-label"></strong><button class="secondary small" data-cal-next>Következő ›</button>`;
-    host.prepend(nav);
-    const label = nav.querySelector('.qa-cal-label');
-    const updateLabel = () => label.textContent = state.calendarCursor.toLocaleDateString('hu-HU', {year:'numeric', month:'long'});
-    updateLabel();
-    nav.querySelector('[data-cal-prev]').onclick = () => { state.calendarCursor.setMonth(state.calendarCursor.getMonth()-1); render(); };
-    nav.querySelector('[data-cal-next]').onclick = () => { state.calendarCursor.setMonth(state.calendarCursor.getMonth()+1); render(); };
-    return result;
+    const ex = selectedExercise();
+    if (!ex) return;
+    const map = await window.api('calendar', {exerciseId: ex.id});
+    const d = state.calendarCursor;
+    const y=d.getFullYear(), m=d.getMonth();
+    const first=new Date(y,m,1), days=new Date(y,m+1,0).getDate();
+    let start=first.getDay(); start=start===0?6:start-1;
+    let cells='';
+    for(let i=0;i<start;i++) cells+='<div></div>';
+    for(let day=1;day<=days;day++) {
+      const k=`${y}-${pad(m+1)}-${pad(day)}`, v=map[k];
+      let cls='calendar-day';
+      if(v?.rest_day) cls+=' rest'; else if(v?.completed) cls+=' done'; else if(Number(v?.total||0)>0) cls+=' partial';
+      cells += `<button class="${cls}" title="${v?`${fmtNum(v.total)} / ${fmtNum(v.target||ex.daily_goal)} ${esc(ex.unit)}`:''}">${day}</button>`;
+    }
+    $('#calendarView').innerHTML=`<div class="row between"><button class="secondary small" id="calPrev">‹</button><h2>📅 ${new Intl.DateTimeFormat('hu-HU',{month:'long',year:'numeric'}).format(d)}</h2><button class="secondary small" id="calNext">›</button></div><select id="calEx">${state.exercises.map(x=>`<option value="${x.id}" ${x.id===ex.id?'selected':''}>${esc(x.name)}</option>`).join('')}</select><div class="calendar-head"><span>H</span><span>K</span><span>Sze</span><span>Cs</span><span>P</span><span>Szo</span><span>V</span></div><div class="calendar-grid">${cells}</div><div class="legend"><span><i class="dot done"></i>Cél teljesítve</span><span><i class="dot partial"></i>Részleges</span><span><i class="dot rest"></i>Pihenőnap</span></div>`;
+    $('#calPrev').onclick=()=>{state.calendarCursor=new Date(y,m-1,1);render()};
+    $('#calNext').onclick=()=>{state.calendarCursor=new Date(y,m+1,1);render()};
+    $('#calEx').onchange=e=>{state.activeExerciseId=e.target.value;render()};
   };
-
-  window.loadChallenges = async function() {
-    const result = await originalLoadChallenges();
-    document.querySelectorAll('[data-challenge]').forEach(card => {
-      const type = card.dataset.challengeType;
-      if (type !== 'race') return;
-      const winner = card.dataset.winnerName;
-      if (winner) {
-        const el = document.createElement('div');
-        el.className = 'success-banner';
-        el.textContent = `🏆 Győztes: ${winner}`;
-        card.appendChild(el);
-      }
-    });
-    return result;
-  };
-
-  // Re-run the active screen after the initial app mount so wrappers are used.
-  if (window.state && state.screen === 'home' && state.profile) {
-    setTimeout(() => { try { render(); } catch (_) {} }, 0);
-  }
 })();
