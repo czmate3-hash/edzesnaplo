@@ -1,10 +1,11 @@
-/* Final QA layer: date ranges, calendar navigation, dynamic goal ring and small UI corrections. */
+/* Final QA layer: date ranges, calendar navigation, dynamic goal ring and challenge presentation. */
 (() => {
   if (window.__edzesnaploQaLoaded) return;
   window.__edzesnaploQaLoaded = true;
   const originalApi = window.api;
   const originalLoadHome = window.loadHome;
   const originalLoadStats = window.loadStats;
+  const originalLoadChallenges = window.loadChallenges;
   const pad = n => String(n).padStart(2, '0');
   const key = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
   const addDays = (d,n) => { const x=new Date(d); x.setDate(x.getDate()+n); return x; };
@@ -42,24 +43,31 @@
   window.loadStats = async function() { return originalLoadStats(); };
 
   window.loadCalendar = async function() {
-    const ex = selectedExercise();
-    if (!ex) return;
+    const ex = selectedExercise(); if (!ex) return;
     const map = await window.api('calendar', {exerciseId: ex.id});
-    const d = state.calendarCursor;
-    const y=d.getFullYear(), m=d.getMonth();
-    const first=new Date(y,m,1), days=new Date(y,m+1,0).getDate();
-    let start=first.getDay(); start=start===0?6:start-1;
-    let cells='';
-    for(let i=0;i<start;i++) cells+='<div></div>';
-    for(let day=1;day<=days;day++) {
-      const k=`${y}-${pad(m+1)}-${pad(day)}`, v=map[k];
-      let cls='calendar-day';
-      if(v?.rest_day) cls+=' rest'; else if(v?.completed) cls+=' done'; else if(Number(v?.total||0)>0) cls+=' partial';
-      cells += `<button class="${cls}" title="${v?`${fmtNum(v.total)} / ${fmtNum(v.target||ex.daily_goal)} ${esc(ex.unit)}`:''}">${day}</button>`;
-    }
+    const d = state.calendarCursor, y=d.getFullYear(), m=d.getMonth();
+    const first=new Date(y,m,1), days=new Date(y,m+1,0).getDate(); let start=first.getDay(); start=start===0?6:start-1;
+    let cells=''; for(let i=0;i<start;i++) cells+='<div></div>';
+    for(let day=1;day<=days;day++) { const k=`${y}-${pad(m+1)}-${pad(day)}`,v=map[k]; let cls='calendar-day'; if(v?.rest_day)cls+=' rest'; else if(v?.completed)cls+=' done'; else if(Number(v?.total||0)>0)cls+=' partial'; cells+=`<button class="${cls}" title="${v?`${fmtNum(v.total)} / ${fmtNum(v.target||ex.daily_goal)} ${esc(ex.unit)}`:''}">${day}</button>`; }
     $('#calendarView').innerHTML=`<div class="row between"><button class="secondary small" id="calPrev">‹</button><h2>📅 ${new Intl.DateTimeFormat('hu-HU',{month:'long',year:'numeric'}).format(d)}</h2><button class="secondary small" id="calNext">›</button></div><select id="calEx">${state.exercises.map(x=>`<option value="${x.id}" ${x.id===ex.id?'selected':''}>${esc(x.name)}</option>`).join('')}</select><div class="calendar-head"><span>H</span><span>K</span><span>Sze</span><span>Cs</span><span>P</span><span>Szo</span><span>V</span></div><div class="calendar-grid">${cells}</div><div class="legend"><span><i class="dot done"></i>Cél teljesítve</span><span><i class="dot partial"></i>Részleges</span><span><i class="dot rest"></i>Pihenőnap</span></div>`;
-    $('#calPrev').onclick=()=>{state.calendarCursor=new Date(y,m-1,1);render()};
-    $('#calNext').onclick=()=>{state.calendarCursor=new Date(y,m+1,1);render()};
-    $('#calEx').onchange=e=>{state.activeExerciseId=e.target.value;render()};
+    $('#calPrev').onclick=()=>{state.calendarCursor=new Date(y,m-1,1);render()}; $('#calNext').onclick=()=>{state.calendarCursor=new Date(y,m+1,1);render()}; $('#calEx').onchange=e=>{state.activeExerciseId=e.target.value;render()};
+  };
+
+  window.loadChallenges = async function() {
+    const result = await originalLoadChallenges();
+    document.querySelectorAll('[data-chaccept]').forEach(btn => {
+      if (btn.parentElement.querySelector('[data-chreject]')) return;
+      const reject=document.createElement('button'); reject.className='danger full'; reject.dataset.chreject=btn.dataset.chaccept; reject.textContent='❌ Elutasítom';
+      btn.parentElement.appendChild(reject);
+      reject.onclick=async()=>{await api('challenge-respond',{challengeId:reject.dataset.chreject,accept:false});await window.loadChallenges();};
+    });
+    const list=state.challenges||[];
+    document.querySelectorAll('.challenge').forEach((card,i)=>{
+      const c=list[i]; if(!c)return;
+      if(c.winner){const b=document.createElement('div');b.className='success-banner';b.textContent=`🏆 Győztes: ${c.winner.username}`;card.appendChild(b);}
+      if(c.myStatus==='accepted' && c.end_at && new Date(c.end_at)<new Date() && c.status!=='completed'){const b=document.createElement('div');b.className='warn-banner';b.textContent='⌛ A kihívás lejárt.';card.appendChild(b);}
+      if(c.challenge_type==='race' && c.memberTotals?.length){const summary=document.createElement('div');summary.className='muted';summary.textContent='Verseny: '+c.memberTotals.map(m=>`${m.username} ${fmtNum(m.total)}`).join(' · ');card.appendChild(summary);}
+    });
+    return result;
   };
 })();
