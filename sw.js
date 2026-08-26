@@ -1,5 +1,5 @@
-const CACHE = 'edzesnaplo-v3';
-const CORE = ['./', './index.html', './styles.css', './app.js', './qa-fixes.js', './manifest.webmanifest', './icons/icon-192.svg', './icons/icon-512.svg'];
+const CACHE = 'edzesnaplo-v4';
+const CORE = ['./', './index.html', './styles.css', './app.js', './auth-route.js', './qa-fixes.js', './manifest.webmanifest', './icons/icon-192.svg', './icons/icon-512.svg'];
 
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(CORE)).then(() => self.skipWaiting()));
@@ -19,7 +19,7 @@ self.addEventListener('fetch', event => {
   const url = new URL(request.url);
   if (url.hostname.endsWith('.supabase.co') || request.headers.has('Authorization')) return;
 
-  if (request.mode === 'navigate' || /\/(app|qa-fixes|styles)\.js$|\/(styles)\.css$|manifest\.webmanifest$|\/icons\//.test(url.pathname)) {
+  if (request.mode === 'navigate' || /\/(app|auth-route|qa-fixes|styles)\.js$|\/(styles)\.css$|manifest\.webmanifest$|\/icons\//.test(url.pathname)) {
     event.respondWith(
       fetch(request).then(response => {
         const copy = response.clone();
