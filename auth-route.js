@@ -1,5 +1,5 @@
 (() => {
-  const AUTH_URL = EDZESNAPLO_AUTH_URL;
+  const AUTH_URL = 'https://ubskxxckecavlykftzju.supabase.co/functions/v1/auth';
   const originalFetch = window.fetch.bind(window);
   window.fetch = async (input, init = {}) => {
     try {
