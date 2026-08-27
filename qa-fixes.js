@@ -1,4 +1,4 @@
-/* Final QA layer: date ranges, calendar navigation, dynamic goal ring and challenge presentation. */
+/* Final QA layer: date ranges, calendar navigation, dynamic goal ring, challenge presentation and day finalization. */
 (() => {
   if (window.__edzesnaploQaLoaded) return;
   window.__edzesnaploQaLoaded = true;
@@ -26,6 +26,25 @@
       }
       return originalApi(action, p, requiresAuth);
     };
+  }
+
+  async function finalizeDayAtStartup() {
+    if (!state.profile || !state.token) return;
+    try {
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/finalize-day`, {
+        method:'POST',
+        headers:{'Content-Type':'application/json','apikey':SUPABASE_ANON_KEY,'Authorization':`Bearer ${state.token}`},
+        body:'{}'
+      });
+      const data = await res.json().catch(()=>({}));
+      if (!res.ok) throw new Error(data.error || `Napzárási hiba (${res.status})`);
+      if (Array.isArray(data.changed) && data.changed.length) {
+        showToast('A tegnapi nem teljesített megemelt cél visszaállt.','info');
+      }
+      if (typeof originalLoadHome === 'function' && state.screen === 'home') await originalLoadHome();
+    } catch (e) {
+      console.warn('finalize-day:', e);
+    }
   }
 
   window.loadHome = async function() {
@@ -70,4 +89,12 @@
     });
     return result;
   };
+
+  const bootWait = setInterval(() => {
+    if (state.profile && state.token) {
+      clearInterval(bootWait);
+      finalizeDayAtStartup();
+    }
+  }, 100);
+  setTimeout(() => clearInterval(bootWait), 10000);
 })();
